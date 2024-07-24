@@ -1,0 +1,35 @@
+.sign-in-container {
+    @apply min-h-screen bg-gradient-to-r from-purple-600 to-blue-500 flex items-center justify-center p-4;
+  }
+  
+  .sign-in-form {
+    @apply bg-gray-800 rounded-lg shadow-lg p-8 w-full max-w-md;
+  }
+  
+  .sign-in-title {
+    @apply text-white text-3xl font-bold mb-2 text-center;
+  }
+  
+  .sign-in-subtitle {
+    @apply text-gray-400 text-sm mb-6 text-center;
+  }
+  
+  .input-group {
+    @apply mb-4;
+  }
+  
+  .input-field {
+    @apply w-full bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+  
+  .sign-in-button {
+    @apply w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-md mt-6 border border-gray-600;
+  }
+  
+  .sign-up-link {
+    @apply text-gray-400 text-sm text-center mt-6 block;
+  }
+  
+  .sign-up-link a {
+    @apply text-blue-400 hover:text-blue-300;
+  }
