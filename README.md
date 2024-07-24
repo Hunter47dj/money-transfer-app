@@ -1,6 +1,9 @@
 # Getting Started with Create React App
 
-https://money-transfer-app.web.app - DEMO
+https://money-transfer-app.web.app - DEMO  
+  test credintials :-                    
+  email : dc@gmail.com 
+  password : dc@gmail.com 
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
