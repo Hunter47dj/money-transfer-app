@@ -1,9 +1,9 @@
-// src/components/SignUp.js
 import React, { useState } from 'react';
 import { auth, db } from '../firebaseConfig';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, getDocs, collection } from 'firebase/firestore';
 import { Link, useNavigate } from 'react-router-dom';
+import QRCode from 'qrcode'; // Import the qrcode library
 
 function SignUp() {
     const [email, setEmail] = useState('');
@@ -31,49 +31,27 @@ function SignUp() {
             const user = userCredential.user;
             const accountNumber = await generateAccountNumber();
 
+            // Generate QR code data URL using qrcode library
+            const qrCodeDataUrl = await QRCode.toDataURL(email);
+
             await setDoc(doc(db, 'users', user.uid), {
                 email: email,
                 name: name,
                 accountNumber: accountNumber,
                 balance: 2000,
+                qrCode: qrCodeDataUrl // Store the QR code data URL
             });
 
             navigate('/dashboard');
         } catch (error) {
-            console.error('Error signing up:', error);
+            console.error('Error signing up:', error.message);
+            if (error.code === 'auth/email-already-in-use') {
+                alert('This email is already in use. Please use a different email or sign in.');
+            } else {
+                alert('An error occurred during sign up. Please try again.');
+            }
         }
     };
-
-    // return (
-    //     <div>
-    //         <h1>Sign Up</h1>
-    //         <form onSubmit={handleSignUp}>
-    //             <input
-    //                 type="text"
-    //                 placeholder="Name"
-    //                 value={name}
-    //                 onChange={(e) => setName(e.target.value)}
-    //                 required
-    //             />
-    //             <input
-    //                 type="email"
-    //                 placeholder="Email"
-    //                 value={email}
-    //                 onChange={(e) => setEmail(e.target.value)}
-    //                 required
-    //             />
-    //             <input
-    //                 type="password"
-    //                 placeholder="Password"
-    //                 value={password}
-    //                 onChange={(e) => setPassword(e.target.value)}
-    //                 required
-    //             />
-    //             <button type="submit">Sign Up</button>
-    //             <p>Already have an account? <Link to="/signin">Sign In</Link></p>
-    //         </form>
-    //     </div>
-    // );
 
     return (
         <div className="min-h-screen bg-gradient-to-r from-purple-600 to-blue-500 flex items-center justify-center p-4">
@@ -118,7 +96,6 @@ function SignUp() {
             </div>
         </div>
     );
-
 }
 
 export default SignUp;

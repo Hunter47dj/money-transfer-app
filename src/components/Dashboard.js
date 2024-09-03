@@ -3,50 +3,49 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../firebaseConfig';
 import { signOut } from 'firebase/auth';
-import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { QrReader } from 'react-qr-reader';
 
 function Dashboard() {
     const [userData, setUserData] = useState(null);
     const [recipientEmail, setRecipientEmail] = useState('');
     const [amount, setAmount] = useState('');
     const [transactions, setTransactions] = useState([]);
+    const [transferMethod, setTransferMethod] = useState('email');
+    const [showQrReader, setShowQrReader] = useState(false);
+    const [scannedEmail, setScannedEmail] = useState('');
     const navigate = useNavigate();
 
     useEffect(() => {
-        const fetchUserData = async () => {
-            const user = auth.currentUser;
-            if (user) {
-                const docRef = doc(db, 'users', user.uid);
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    setUserData(docSnap.data());
+        const user = auth.currentUser;
+        if (user) {
+            const userDocRef = doc(db, 'users', user.uid);
+            const unsubscribeUser = onSnapshot(userDocRef, (doc) => {
+                if (doc.exists()) {
+                    setUserData(doc.data());
                 }
-            } else {
-                navigate('/');
-            }
-        };
+            });
 
-        fetchUserData();
-    }, [navigate]);
-
-    useEffect(() => {
-        const fetchTransactions = async () => {
-            const user = auth.currentUser;
-            if (user) {
-                const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
-                const querySnapshot = await getDocs(q);
+            const q = query(collection(db, 'transactions'), where('userId', '==', user.uid));
+            const unsubscribeTransactions = onSnapshot(q, (querySnapshot) => {
                 const transactionsData = querySnapshot.docs.map(doc => doc.data());
                 setTransactions(transactionsData);
-            }
-        };
+            });
 
-        fetchTransactions();
-    }, []);
+            return () => {
+                unsubscribeUser();
+                unsubscribeTransactions();
+            };
+        } else {
+            navigate('/');
+        }
+    }, [navigate]);
 
     const handleTransfer = async (e) => {
         e.preventDefault();
         const user = auth.currentUser;
-        const recipientQuery = query(collection(db, 'users'), where('email', '==', recipientEmail));
+        const recipientEmailToUse = transferMethod === 'email' ? recipientEmail : scannedEmail;
+        const recipientQuery = query(collection(db, 'users'), where('email', '==', recipientEmailToUse));
         const recipientSnapshot = await getDocs(recipientQuery);
 
         if (!recipientSnapshot.empty) {
@@ -72,7 +71,7 @@ function Dashboard() {
                     userId: user.uid,
                     type: 'sent',
                     amount: Number(amount),
-                    to: recipientEmail,
+                    to: recipientEmailToUse,
                     timestamp: new Date(),
                 });
 
@@ -85,22 +84,10 @@ function Dashboard() {
                     timestamp: new Date(),
                 });
 
-                // Update local state for sender's balance
-                setUserData((prevData) => ({
-                    ...prevData,
-                    balance: newSenderBalance
-                }));
-
-                // Add new transaction to local state
-                const newTransaction = {
-                    type: 'sent',
-                    amount: Number(amount),
-                    to: recipientEmail,
-                    timestamp: new Date()
-                };
-                setTransactions(prevTransactions => [newTransaction, ...prevTransactions]);
-
-                // alert('Transfer successful!');
+                setRecipientEmail('');
+                setScannedEmail('');
+                setAmount('');
+                setShowQrReader(false);
             } else {
                 alert('Insufficient balance or invalid amount');
             }
@@ -113,53 +100,6 @@ function Dashboard() {
         await signOut(auth);
         navigate('/');
     };
-
-    // return (
-    //     <div>
-    //         <h1>Banking App</h1>
-    //         {userData && (
-    //             <div>
-    //                 <h2>Welcome, {userData.name}</h2>
-    //                 <p>Email: {userData.email}</p>
-    //                 <p>Account Number: {userData.accountNumber}</p>
-    //                 <p>Balance: ${userData.balance}</p>
-    //             </div>
-    //         )}
-    //         <h3>Transfer Money</h3>
-    //         <form onSubmit={handleTransfer}>
-    //             <input
-    //                 type="email"
-    //                 placeholder="Recipient Email"
-    //                 value={recipientEmail}
-    //                 onChange={(e) => setRecipientEmail(e.target.value)}
-    //                 required
-    //             />
-    //             <input
-    //                 type="number"
-    //                 placeholder="Amount"
-    //                 value={amount}
-    //                 onChange={(e) => setAmount(e.target.value)}
-    //                 required
-    //             />
-    //             <button type="submit">Transfer</button>
-    //         </form>
-    //         <button onClick={handleLogout}>Log Out</button>
-    //         <h3>Transaction History</h3>
-    //         <ul>
-    //             {transactions.sort((a, b) => b.timestamp - a.timestamp).map((transaction, index) => (
-    //                 <li key={index}>
-    //                     {transaction.type === 'sent' 
-    //                         ? `Sent $${transaction.amount} to ${transaction.to}` 
-    //                         : `Received $${transaction.amount} from ${transaction.from}`
-    //                     } on {transaction.timestamp instanceof Date 
-    //                             ? transaction.timestamp.toString() 
-    //                             : new Date(transaction.timestamp.seconds * 1000).toString()
-    //                         }
-    //                 </li>
-    //             ))}
-    //         </ul>
-    //     </div>
-    // );
 
     return (
         <div className="min-h-screen bg-gradient-to-r from-purple-600 to-blue-500 text-white">
@@ -175,52 +115,138 @@ function Dashboard() {
                 </div>
                 
                 {userData && (
-                    <div className="bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
-                        <h2 className="text-2xl font-bold mb-4">Welcome, {userData.name}</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-gray-700 p-4 rounded-lg">
-                                <p className="text-gray-400">Email</p>
-                                <p className="font-semibold">{userData.email}</p>
-                            </div>
-                            <div className="bg-gray-700 p-4 rounded-lg">
-                                <p className="text-gray-400">Account Number</p>
-                                <p className="font-semibold">{userData.accountNumber}</p>
-                            </div>
-                            <div className="bg-gray-700 p-4 rounded-lg">
-                                <p className="text-gray-400">Balance</p>
-                                <p className="font-semibold text-green-400">${userData.balance}</p>
-                            </div>
-                        </div>
-                    </div>
+    <div className="bg-gray-800 rounded-lg shadow-lg p-6 mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Left Column - User Details */}
+        <div className="flex flex-col gap-4">
+            <h2 className="text-2xl font-bold mb-4">Welcome, {userData.name}</h2>
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <p className="text-gray-400">Email</p>
+                <p className="font-semibold">{userData.email}</p>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <p className="text-gray-400">Account Number</p>
+                <p className="font-semibold">{userData.accountNumber}</p>
+            </div>
+            <div className="bg-gray-700 p-4 rounded-lg">
+                <p className="text-gray-400">Balance</p>
+                <p className="font-semibold text-green-400">${userData.balance}</p>
+            </div>
+        </div>
+        
+        {/* Right Column - QR Code */}
+        <div className="flex items-center justify-center">
+            <div className="bg-gray-700 p-4 rounded-lg flex flex-col items-center">
+                <p className="text-gray-400 mb-2">Your QR Code</p>
+                {userData.qrCode && (
+                    <img src={userData.qrCode} alt="QR Code" className="w-48 h-48" />
                 )}
+            </div>
+        </div>
+    </div>
+)}
+
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="bg-gray-800 rounded-lg shadow-lg p-6">
                         <h3 className="text-xl font-bold mb-4">Transfer Money</h3>
-                        <form onSubmit={handleTransfer} className="space-y-4">
-                            <input
-                                type="email"
-                                placeholder="Recipient Email"
-                                value={recipientEmail}
-                                onChange={(e) => setRecipientEmail(e.target.value)}
-                                required
-                                className="w-full bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <input
-                                type="number"
-                                placeholder="Amount"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                required
-                                className="w-full bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <button 
-                                type="submit"
-                                className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-                            >
-                                Transfer
-                            </button>
-                        </form>
+                        <div className="mb-4">
+                            <label className="inline-flex items-center">
+                                <input
+                                    type="radio"
+                                    className="form-radio"
+                                    name="transferMethod"
+                                    value="email"
+                                    checked={transferMethod === 'email'}
+                                    onChange={() => setTransferMethod('email')}
+                                />
+                                <span className="ml-2">Send by Email</span>
+                            </label>
+                            <label className="inline-flex items-center ml-6">
+                                <input
+                                    type="radio"
+                                    className="form-radio"
+                                    name="transferMethod"
+                                    value="qr"
+                                    checked={transferMethod === 'qr'}
+                                    onChange={() => setTransferMethod('qr')}
+                                />
+                                <span className="ml-2">Scan QR Code</span>
+                            </label>
+                        </div>
+                        {transferMethod === 'email' ? (
+                            <form onSubmit={handleTransfer} className="space-y-4">
+                                <input
+                                    type="email"
+                                    placeholder="Recipient Email"
+                                    value={recipientEmail}
+                                    onChange={(e) => setRecipientEmail(e.target.value)}
+                                    required
+                                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <input
+                                    type="number"
+                                    placeholder="Amount"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    required
+                                    className="w-full bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button 
+                                    type="submit"
+                                    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                                >
+                                    Transfer
+                                </button>
+                            </form>
+                        ) : (
+                            <div>
+                                {showQrReader ? (
+                                    <QrReader
+                                        onResult={(result, error) => {
+                                            if (result) {
+                                                setScannedEmail(result?.text);
+                                                setShowQrReader(false);
+                                            }
+                                            if (error) {
+                                                console.error(error);
+                                            }
+                                        }}
+                                        style={{ width: '100%' }}
+                                    />
+                                ) : (
+                                    <button
+                                        onClick={() => setShowQrReader(true)}
+                                        className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                                    >
+                                        Scan QR Code
+                                    </button>
+                                )}
+                                {scannedEmail && (
+                                    <form onSubmit={handleTransfer} className="space-y-4 mt-4">
+                                        <input
+                                            type="email"
+                                            value={scannedEmail}
+                                            readOnly
+                                            className="w-full bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3"
+                                        />
+                                        <input
+                                            type="number"
+                                            placeholder="Amount"
+                                            value={amount}
+                                            onChange={(e) => setAmount(e.target.value)}
+                                            required
+                                            className="w-full bg-gray-700 text-white border border-gray-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        />
+                                        <button 
+                                            type="submit"
+                                            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                                        >
+                                            Transfer
+                                        </button>
+                                    </form>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     <div className="bg-gray-800 rounded-lg shadow-lg p-6">
@@ -250,7 +276,6 @@ function Dashboard() {
             </div>
         </div>
     );
-
 }
 
 export default Dashboard;

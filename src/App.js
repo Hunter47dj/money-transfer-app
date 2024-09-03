@@ -16,7 +16,7 @@ function App() {
             <Routes>
                 <Route path="/signup" element={<SignUp />} />
                 <Route path="/signin" element={<SignIn />} />
-                {user && <Route path="/dashboard" element={<Dashboard userData={user} />} />}
+                {user && <Route path="/dashboard" element={<Dashboard />} />}
                 <Route path="/" element={<SignIn />} />
             </Routes>
         </Router>
